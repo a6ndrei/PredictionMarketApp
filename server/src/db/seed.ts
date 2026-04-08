@@ -157,7 +157,7 @@ function createRandomMarket(): GeneratedMarket {
     title: createMarketTitle(category),
     description: createMarketDescription(category),
     status: faker.helpers.arrayElement(MARKET_STATUS_OPTIONS),
-    outcomes: createMarketOutcomes(category),
+    outcomes: createMarketOutcomes(category) as string[],
   };
 }
 
@@ -222,6 +222,7 @@ async function insertMarkets(users: SeededUser[]) {
     };
 
     const [createdMarket] = await db.insert(schema.marketsTable).values(marketInsert).returning();
+    if (!createdMarket) throw new Error("Failed to insert market");
     const outcomeValues: MarketOutcomeInsert[] = marketData.outcomes.map((title, position) => ({
       marketId: createdMarket.id,
       title,

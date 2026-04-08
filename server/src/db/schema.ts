@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
-// Users table
+
 export const usersTable = sqliteTable(
   "users",
   {
@@ -18,6 +18,10 @@ export const usersTable = sqliteTable(
     username: text("username").notNull().unique(),
     email: text("email").notNull().unique(),
     passwordHash: text("password_hash").notNull(),
+    role: text("role", { enum: ["user", "admin"] }).notNull().default("user"),
+    balance: real("balance").notNull().default(1000.0),
+    totalWinnings: real("total_winnings").notNull().default(0.0),
+    apiToken: text("api_token").unique(),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -28,10 +32,11 @@ export const usersTable = sqliteTable(
   (table) => ({
     usernameIdx: uniqueIndex("users_username_idx").on(table.username),
     emailIdx: uniqueIndex("users_email_idx").on(table.email),
+    apiTokenIdx: uniqueIndex("users_api_token_idx").on(table.apiToken),
   }),
 );
 
-// Markets table
+
 export const marketsTable = sqliteTable(
   "markets",
   {
@@ -55,7 +60,7 @@ export const marketsTable = sqliteTable(
   }),
 );
 
-// Market Outcomes table
+
 export const marketOutcomesTable = sqliteTable(
   "market_outcomes",
   {
@@ -64,14 +69,14 @@ export const marketOutcomesTable = sqliteTable(
       .notNull()
       .references(() => marketsTable.id),
     title: text("title").notNull(),
-    position: integer("position").notNull(), // for ordering outcomes
+    position: integer("position").notNull(), 
   },
   (table) => ({
     marketIdIdx: index("market_outcomes_market_id_idx").on(table.marketId),
   }),
 );
 
-// Bets table
+
 export const betsTable = sqliteTable(
   "bets",
   {
@@ -97,10 +102,10 @@ export const betsTable = sqliteTable(
   }),
 );
 
-// Relations
+
 export const usersRelations = relations(usersTable, ({ many }) => ({
   createdMarkets: many(marketsTable, { relationName: "createdBy" }),
-  bets: many(betsTable, { relationName: "bets" }),
+  bets: many(betsTable, { relationName: "userBets" }),
 }));
 
 export const marketsRelations = relations(marketsTable, ({ one, many }) => ({
@@ -110,7 +115,7 @@ export const marketsRelations = relations(marketsTable, ({ one, many }) => ({
     relationName: "createdBy",
   }),
   outcomes: many(marketOutcomesTable, { relationName: "outcomes" }),
-  bets: many(betsTable, { relationName: "bets" }),
+  bets: many(betsTable, { relationName: "marketBets" }),
   resolvedOutcome: one(marketOutcomesTable, {
     fields: [marketsTable.resolvedOutcomeId],
     references: [marketOutcomesTable.id],
@@ -123,23 +128,23 @@ export const marketOutcomesRelations = relations(marketOutcomesTable, ({ one, ma
     references: [marketsTable.id],
     relationName: "outcomes",
   }),
-  bets: many(betsTable, { relationName: "bets" }),
+  bets: many(betsTable, { relationName: "outcomeBets" }),
 }));
 
 export const betsRelations = relations(betsTable, ({ one }) => ({
   user: one(usersTable, {
     fields: [betsTable.userId],
     references: [usersTable.id],
-    relationName: "bets",
+    relationName: "userBets",
   }),
   market: one(marketsTable, {
     fields: [betsTable.marketId],
     references: [marketsTable.id],
-    relationName: "bets",
+    relationName: "marketBets",
   }),
   outcome: one(marketOutcomesTable, {
     fields: [betsTable.outcomeId],
     references: [marketOutcomesTable.id],
-    relationName: "bets",
+    relationName: "outcomeBets",
   }),
 }));

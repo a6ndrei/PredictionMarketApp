@@ -1,7 +1,10 @@
 import { Elysia } from "elysia";
-import { getUserById } from "../lib/auth";
+import { getUserById, getUserByApiToken } from "../lib/auth";
+
+import { jwtPlugin } from "../plugins/jwt";
 
 export const authMiddleware = new Elysia({ name: "auth-middleware" })
+  .use(jwtPlugin)
   .derive(async ({ headers, jwt }) => {
     const authHeader = headers["authorization"];
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -9,12 +12,20 @@ export const authMiddleware = new Elysia({ name: "auth-middleware" })
     }
 
     const token = authHeader.substring(7);
-    const payload = await jwt.verify(token);
-    if (!payload) {
-      return { user: null };
+
+    
+    const payload = await jwt.verify(token) as { userId?: number };
+    if (payload && payload.userId) {
+      const user = await getUserById(payload.userId);
+      return { user };
     }
 
-    const user = await getUserById(payload.userId);
-    return { user };
+  
+    const apiUser = await getUserByApiToken(token);
+    if (apiUser) {
+      return { user: apiUser };
+    }
+
+    return { user: null };
   })
-  .as("plugin");
+  .as("global");

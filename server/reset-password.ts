@@ -3,9 +3,7 @@ import db from "./src/db";
 import { usersTable } from "./src/db/schema";
 import { hashPassword } from "./src/lib/auth";
 
-/**
- * Generate a random password
- */
+
 function generatePassword(length: number = 12): string {
   const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const lowercase = "abcdefghijklmnopqrstuvwxyz";
@@ -24,7 +22,7 @@ function generatePassword(length: number = 12): string {
 
 async function resetPassword(emailOrId: string) {
   try {
-    // Find user by email or ID
+   
     let user;
     const isNumber = /^\d+$/.test(emailOrId);
 
@@ -43,11 +41,11 @@ async function resetPassword(emailOrId: string) {
       process.exit(1);
     }
 
-    // Generate new password
+
     const newPassword = generatePassword();
     const passwordHash = await hashPassword(newPassword);
 
-    // Update user
+    
     await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, user.id));
 
     console.log(`✅ Password reset for user: ${user.username} (${user.email})`);

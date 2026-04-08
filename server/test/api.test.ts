@@ -5,14 +5,14 @@ import db from "../src/db";
 
 const BASE = "http://localhost";
 
-// Shared state across tests (populated by earlier tests, consumed by later ones)
+
 let authToken: string;
 let userId: number;
 let marketId: number;
 let outcomeId: number;
 
 beforeAll(async () => {
-  // Run migrations to create tables on the in-memory DB
+ 
   await migrate(db, { migrationsFolder: "./drizzle" });
 });
 
@@ -31,7 +31,7 @@ describe("Auth", () => {
     );
 
     expect(res.status).toBe(201);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.id).toBeDefined();
     expect(data.username).toBe(username);
     expect(data.email).toBe(email);
@@ -63,7 +63,7 @@ describe("Auth", () => {
     );
 
     expect(res.status).toBe(400);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.errors.length).toBeGreaterThan(0);
   });
 
@@ -77,7 +77,7 @@ describe("Auth", () => {
     );
 
     expect(res.status).toBe(200);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.id).toBe(userId);
     expect(data.token).toBeDefined();
   });
@@ -128,7 +128,7 @@ describe("Markets", () => {
     );
 
     expect(res.status).toBe(201);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.id).toBeDefined();
     expect(data.title).toBe("Will it rain tomorrow?");
     expect(data.outcomes).toHaveLength(2);
@@ -150,27 +150,28 @@ describe("Markets", () => {
     );
 
     expect(res.status).toBe(400);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.errors.length).toBeGreaterThan(0);
   });
 
   it("GET /api/markets — lists markets", async () => {
     const res = await app.handle(new Request(`${BASE}/api/markets`));
 
+    if (res.status !== 200) console.log(await res.text());
     expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(Array.isArray(data)).toBe(true);
-    expect(data.length).toBeGreaterThan(0);
-    expect(data[0].id).toBeDefined();
-    expect(data[0].title).toBeDefined();
-    expect(data[0].outcomes).toBeDefined();
+    const data = await res.json() as any;
+    expect(Array.isArray(data.markets)).toBe(true);
+    expect(data.markets.length).toBeGreaterThan(0);
+    expect(data.markets[0].id).toBeDefined();
+    expect(data.markets[0].title).toBeDefined();
+    expect(data.markets[0].outcomes).toBeDefined();
   });
 
   it("GET /api/markets/:id — returns market detail", async () => {
     const res = await app.handle(new Request(`${BASE}/api/markets/${marketId}`));
 
     expect(res.status).toBe(200);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.id).toBe(marketId);
     expect(data.title).toBe("Will it rain tomorrow?");
     expect(data.description).toBe("Weather prediction");
@@ -210,7 +211,7 @@ describe("Bets", () => {
     );
 
     expect(res.status).toBe(201);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.id).toBeDefined();
     expect(data.userId).toBe(userId);
     expect(data.marketId).toBe(marketId);
@@ -231,7 +232,7 @@ describe("Bets", () => {
     );
 
     expect(res.status).toBe(400);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.errors.length).toBeGreaterThan(0);
   });
 });
@@ -241,7 +242,7 @@ describe("Error handling", () => {
     const res = await app.handle(new Request(`${BASE}/nonexistent`));
 
     expect(res.status).toBe(404);
-    const data = await res.json();
+    const data = await res.json() as any;
     expect(data.error).toBe("Not found");
   });
 });

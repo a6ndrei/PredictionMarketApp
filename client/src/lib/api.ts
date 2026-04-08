@@ -1,14 +1,15 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
-// Types
+
 export interface Market {
   id: number;
   title: string;
   description?: string;
   status: "active" | "resolved";
   creator?: string;
-  outcomes: MarketOutcome[];
+  outcomes: Array<MarketOutcome>;
   totalMarketBets: number;
+  createdAt: string;
 }
 
 export interface MarketOutcome {
@@ -22,7 +23,12 @@ export interface User {
   id: number;
   username: string;
   email: string;
-  token: string;
+  token?: string;
+  role?: string;
+  balance?: number;
+  totalWinnings?: number;
+  apiToken?: string;
+  createdAt: string;
 }
 
 export interface Bet {
@@ -34,7 +40,7 @@ export interface Bet {
   createdAt: string;
 }
 
-// API Client
+
 class ApiClient {
   private baseUrl: string;
 
@@ -42,7 +48,7 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  private getAuthHeader() {
+  private getAuthHeader(): Record<string, string> {
     const token = localStorage.getItem("auth_token");
     if (!token) return {};
     return { Authorization: `Bearer ${token}` };
@@ -50,10 +56,10 @@ class ApiClient {
 
   private async request(endpoint: string, options: RequestInit = {}): Promise<any> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers = {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...this.getAuthHeader(),
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     };
 
     const response = await fetch(url, {
@@ -64,7 +70,7 @@ class ApiClient {
     const data = await response.json();
 
     if (!response.ok) {
-      // If there are validation errors, throw them
+      
       if (data.errors && Array.isArray(data.errors)) {
         const errorMessage = data.errors.map((e: any) => `${e.field}: ${e.message}`).join(", ");
         throw new Error(errorMessage);
@@ -75,7 +81,7 @@ class ApiClient {
     return data ?? {};
   }
 
-  // Auth endpoints
+  
   async register(username: string, email: string, password: string): Promise<User> {
     return this.request("/api/auth/register", {
       method: "POST",
@@ -90,28 +96,61 @@ class ApiClient {
     });
   }
 
-  // Markets endpoints
-  async listMarkets(status: "active" | "resolved" = "active"): Promise<Market[]> {
-    return this.request(`/api/markets?status=${status}`);
+
+  async listMarkets(status: "active" | "resolved" = "active", sort: "date" | "totalBets" | "participants" = "date", page: number = 1): Promise<{ markets: Array<Market>, totalCount: number, totalPages: number, page: number }> {
+    return this.request(`/api/markets?status=${status}&sort=${sort}&page=${page}`);
   }
 
   async getMarket(id: number): Promise<Market> {
     return this.request(`/api/markets/${id}`);
   }
 
-  async createMarket(title: string, description: string, outcomes: string[]): Promise<Market> {
+  async createMarket(title: string, description: string, outcomes: Array<string>): Promise<Market> {
     return this.request("/api/markets", {
       method: "POST",
       body: JSON.stringify({ title, description, outcomes }),
     });
   }
 
-  // Bets endpoints
+ 
   async placeBet(marketId: number, outcomeId: number, amount: number): Promise<Bet> {
     return this.request(`/api/markets/${marketId}/bets`, {
       method: "POST",
       body: JSON.stringify({ outcomeId, amount }),
     });
+  }
+
+  
+  async resolveMarket(marketId: number, outcomeId: number): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/markets/${marketId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ outcomeId }),
+    });
+  }
+
+  async archiveMarket(marketId: number): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/markets/${marketId}/archive`, {
+      method: "POST",
+    });
+  }
+
+
+  async getMe(): Promise<User> {
+    return this.request(`/api/users/me`);
+  }
+
+  async getUserBets(status: "active" | "resolved" = "active", page: number = 1): Promise<Array<any>> {
+    return this.request(`/api/users/me/bets?status=${status}&page=${page}`);
+  }
+
+  async generateApiKey(): Promise<{ apiToken: string }> {
+    return this.request(`/api/users/me/api-key`, {
+      method: "POST",
+    });
+  }
+
+  async getLeaderboard(): Promise<Array<User>> {
+    return this.request(`/api/users/leaderboard`);
   }
 }
 

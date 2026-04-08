@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { User } from "./api";
+import { api } from "./api";
+import type { User} from "./api";
 
 interface AuthContextType {
   user: User | null;
@@ -7,6 +8,7 @@ interface AuthContextType {
   login: (user: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,7 +18,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load user from localStorage on mount
+    
     const token = localStorage.getItem("auth_token");
     const userData = localStorage.getItem("auth_user");
 
@@ -33,9 +35,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  const refreshUser = async () => {
+    if (!localStorage.getItem("auth_token")) return;
+    try {
+      const me = await api.getMe();
+      if (me) {
+        setUser((prev) => ({ ...prev, ...me }));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (user && user.token) {
+      refreshUser();
+      const interval = setInterval(refreshUser, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [user?.token]);
+
   const login = (newUser: User) => {
     setUser(newUser);
-    localStorage.setItem("auth_token", newUser.token);
+    localStorage.setItem("auth_token", newUser.token || "");
     localStorage.setItem(
       "auth_user",
       JSON.stringify({
@@ -60,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         isAuthenticated: !!user,
+        refreshUser,
       }}
     >
       {children}

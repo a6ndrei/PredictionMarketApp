@@ -1,12 +1,14 @@
 import { Elysia, t } from "elysia";
 import { authMiddleware } from "../middleware/auth.middleware";
-import { handleCreateMarket, handleListMarkets, handleGetMarket, handlePlaceBet } from "./handlers";
+import { handleCreateMarket, handleListMarkets, handleGetMarket, handlePlaceBet, handleResolveMarket, handleArchiveMarket } from "./handlers";
 
 export const marketRoutes = new Elysia({ prefix: "/api/markets" })
   .use(authMiddleware)
   .get("/", handleListMarkets, {
     query: t.Object({
       status: t.Optional(t.String()),
+      sort: t.Optional(t.String()),
+      page: t.Optional(t.String()),
     }),
   })
   .get("/:id", handleGetMarket, {
@@ -25,6 +27,7 @@ export const marketRoutes = new Elysia({ prefix: "/api/markets" })
     },
     (app) =>
       app
+        .derive(({ user }) => ({ user: user! }))
         .post("/", handleCreateMarket, {
           body: t.Object({
             title: t.String(),
@@ -39,6 +42,19 @@ export const marketRoutes = new Elysia({ prefix: "/api/markets" })
           body: t.Object({
             outcomeId: t.Number(),
             amount: t.Number(),
+          }),
+        })
+        .post("/:id/resolve", handleResolveMarket, {
+          params: t.Object({
+            id: t.Numeric(),
+          }),
+          body: t.Object({
+            outcomeId: t.Number(),
+          }),
+        })
+        .post("/:id/archive", handleArchiveMarket, {
+          params: t.Object({
+            id: t.Numeric(),
           }),
         }),
   );

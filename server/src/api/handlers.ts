@@ -1,4 +1,5 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
+import * as crypto from "crypto";
 import db from "../db";
 import { usersTable, marketsTable, marketOutcomesTable, betsTable } from "../db/schema";
 import { hashPassword, verifyPassword, type AuthTokenPayload } from "../lib/auth";
@@ -20,7 +21,7 @@ export async function handleRegister({
 }: {
   body: { username: string; email: string; password: string };
   jwt: JwtSigner;
-  set: { status: number };
+  set: any;
 }) {
   const { username, email, password } = body;
   const errors = validateRegistration(username, email, password);
@@ -41,15 +42,16 @@ export async function handleRegister({
 
   const passwordHash = await hashPassword(password);
 
-  const newUser = await db.insert(usersTable).values({ username, email, passwordHash }).returning();
+  const [userRow] = await db.insert(usersTable).values({ username, email, passwordHash }).returning();
+  if (!userRow) throw new Error("Failed to create user");
 
-  const token = await jwt.sign({ userId: newUser[0].id });
+  const token = await jwt.sign({ userId: userRow.id });
 
   set.status = 201;
   return {
-    id: newUser[0].id,
-    username: newUser[0].username,
-    email: newUser[0].email,
+    id: userRow.id,
+    username: userRow.username,
+    email: userRow.email,
     token,
   };
 }
@@ -61,7 +63,7 @@ export async function handleLogin({
 }: {
   body: { email: string; password: string };
   jwt: JwtSigner;
-  set: { status: number };
+  set: any;
 }) {
   const { email, password } = body;
   const errors = validateLogin(email, password);
@@ -96,7 +98,7 @@ export async function handleCreateMarket({
   user,
 }: {
   body: { title: string; description?: string; outcomes: string[] };
-  set: { status: number };
+  set: any;
   user: typeof usersTable.$inferSelect;
 }) {
   const { title, description, outcomes } = body;
@@ -107,7 +109,7 @@ export async function handleCreateMarket({
     return { errors };
   }
 
-  const market = await db
+  const [marketRow] = await db
     .insert(marketsTable)
     .values({
       title,
@@ -115,12 +117,13 @@ export async function handleCreateMarket({
       createdBy: user.id,
     })
     .returning();
+  if (!marketRow) throw new Error("Failed to create market");
 
   const outcomeIds = await db
     .insert(marketOutcomesTable)
     .values(
       outcomes.map((title: string, index: number) => ({
-        marketId: market[0].id,
+        marketId: marketRow.id,
         title,
         position: index,
       })),
@@ -129,19 +132,23 @@ export async function handleCreateMarket({
 
   set.status = 201;
   return {
-    id: market[0].id,
-    title: market[0].title,
-    description: market[0].description,
-    status: market[0].status,
+    id: marketRow.id,
+    title: marketRow.title,
+    description: marketRow.description,
+    status: marketRow.status,
     outcomes: outcomeIds,
   };
 }
 
-export async function handleListMarkets({ query }: { query: { status?: string } }) {
+export async function handleListMarkets({ query }: { query: { status?: string, sort?: string, page?: string } }) {
   const statusFilter = query.status || "active";
+  const sortBy = query.sort || "date";
+  const limit = 20;
+  const page = parseInt(query.page || "1");
+  const offset = (page - 1) * limit;
 
   const markets = await db.query.marketsTable.findMany({
-    where: eq(marketsTable.status, statusFilter),
+    where: eq(marketsTable.status, statusFilter as "active" | "resolved"),
     with: {
       creator: {
         columns: { username: true },
@@ -149,7 +156,10 @@ export async function handleListMarkets({ query }: { query: { status?: string } 
       outcomes: {
         orderBy: (outcomes, { asc }) => asc(outcomes.position),
       },
+      bets: true
     },
+    
+    orderBy: (markets, { desc }) => desc(markets.createdAt)
   });
 
   const enrichedMarkets = await Promise.all(
@@ -172,7 +182,9 @@ export async function handleListMarkets({ query }: { query: { status?: string } 
         id: market.id,
         title: market.title,
         status: market.status,
+        createdAt: market.createdAt,
         creator: market.creator?.username,
+        participants: new Set(market.bets?.map((b: any) => b.userId) || []).size,
         outcomes: market.outcomes.map((outcome) => {
           const outcomeBets =
             betsPerOutcome.find((b) => b.outcomeId === outcome.id)?.totalBets || 0;
@@ -191,7 +203,22 @@ export async function handleListMarkets({ query }: { query: { status?: string } 
     }),
   );
 
-  return enrichedMarkets;
+  if (sortBy === "totalBets") {
+    enrichedMarkets.sort((a: any, b: any) => b.totalMarketBets - a.totalMarketBets);
+  } else if (sortBy === "participants") {
+    enrichedMarkets.sort((a: any, b: any) => b.participants - a.participants);
+  } else {
+    enrichedMarkets.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  const paginatedMarkets = enrichedMarkets.slice(offset, offset + limit);
+
+  return {
+    markets: paginatedMarkets,
+    totalCount: enrichedMarkets.length,
+    totalPages: Math.ceil(enrichedMarkets.length / limit),
+    page
+  };
 }
 
 export async function handleGetMarket({
@@ -199,7 +226,7 @@ export async function handleGetMarket({
   set,
 }: {
   params: { id: number };
-  set: { status: number };
+  set: any;
 }) {
   const market = await db.query.marketsTable.findFirst({
     where: eq(marketsTable.id, params.id),
@@ -262,7 +289,7 @@ export async function handlePlaceBet({
 }: {
   params: { id: number };
   body: { outcomeId: number; amount: number };
-  set: { status: number };
+  set: any;
   user: typeof usersTable.$inferSelect;
 }) {
   const marketId = params.id;
@@ -272,6 +299,11 @@ export async function handlePlaceBet({
   if (errors.length > 0) {
     set.status = 400;
     return { errors };
+  }
+
+  if (user.balance < Number(amount)) {
+    set.status = 400;
+    return { error: "Insufficient balance." };
   }
 
   const market = await db.query.marketsTable.findFirst({
@@ -297,22 +329,205 @@ export async function handlePlaceBet({
     return { error: "Outcome not found" };
   }
 
-  const bet = await db
-    .insert(betsTable)
-    .values({
-      userId: user.id,
-      marketId,
-      outcomeId,
-      amount: Number(amount),
-    })
-    .returning();
+  const bet = await db.transaction(async (tx) => {
+    await tx.update(usersTable)
+      .set({ balance: user.balance - Number(amount) })
+      .where(eq(usersTable.id, user.id));
+
+    const newBet = await tx
+      .insert(betsTable)
+      .values({
+        userId: user.id,
+        marketId,
+        outcomeId,
+        amount: Number(amount),
+      })
+      .returning();
+
+    return newBet[0];
+  });
+
+  if (!bet) {
+    set.status = 500;
+    return { error: "Failed to place bet" };
+  }
 
   set.status = 201;
   return {
-    id: bet[0].id,
-    userId: bet[0].userId,
-    marketId: bet[0].marketId,
-    outcomeId: bet[0].outcomeId,
-    amount: bet[0].amount,
+    id: bet.id,
+    userId: bet.userId,
+    marketId: bet.marketId,
+    outcomeId: bet.outcomeId,
+    amount: bet.amount,
   };
+}
+
+export async function handleGenerateApiKey({ user }: { user: typeof usersTable.$inferSelect }) {
+  const token = crypto.randomUUID();
+  await db.update(usersTable).set({ apiToken: token }).where(eq(usersTable.id, user.id));
+  return { apiToken: token };
+}
+
+export async function handleGetMe({ user }: { user: typeof usersTable.$inferSelect }) {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    balance: user.balance,
+    totalWinnings: user.totalWinnings,
+    apiToken: user.apiToken
+  };
+}
+
+export async function handleGetLeaderboard() {
+  const topUsers = await db.query.usersTable.findMany({
+    orderBy: (users, { desc }) => desc(users.totalWinnings),
+    limit: 20,
+    columns: {
+      id: true,
+      username: true,
+      totalWinnings: true,
+      balance: true
+    }
+  });
+  return topUsers;
+}
+
+export async function handleResolveMarket({
+  params,
+  body,
+  set,
+  user
+}: {
+  params: { id: number };
+  body: { outcomeId: number };
+  set: any;
+  user: typeof usersTable.$inferSelect;
+}) {
+  if (user.role !== "admin") {
+    set.status = 403;
+    return { error: "Forbidden: Admins only" };
+  }
+
+  const market = await db.query.marketsTable.findFirst({
+    where: eq(marketsTable.id, params.id),
+    with: { bets: true }
+  });
+
+  if (!market) {
+    set.status = 404;
+    return { error: "Market not found" };
+  }
+
+  if (market.status === "resolved") {
+    set.status = 400;
+    return { error: "Market is already resolved" };
+  }
+
+  const result = await db.transaction(async (tx) => {
+    await tx.update(marketsTable)
+      .set({ status: "resolved", resolvedOutcomeId: body.outcomeId })
+      .where(eq(marketsTable.id, params.id));
+
+    const totalPool = market.bets.reduce((sum: number, b: any) => sum + b.amount, 0);
+    const winningBets = market.bets.filter((b: any) => b.outcomeId === body.outcomeId);
+    const winningPool = winningBets.reduce((sum: number, b: any) => sum + b.amount, 0);
+
+    if (winningPool > 0) {
+      for (const bet of winningBets) {
+        const userPoolShare = bet.amount / winningPool;
+        const payout = totalPool * userPoolShare;
+
+        const bettor = await tx.query.usersTable.findFirst({ where: eq(usersTable.id, bet.userId) });
+        if (bettor) {
+          await tx.update(usersTable)
+            .set({
+              balance: bettor.balance + payout,
+              totalWinnings: bettor.totalWinnings + payout
+            })
+            .where(eq(usersTable.id, bet.userId));
+        }
+      }
+    }
+
+    return { success: true, message: "Market resolved and payouts distributed." };
+  });
+
+  return result;
+}
+
+export async function handleArchiveMarket({
+  params,
+  set,
+  user
+}: {
+  params: { id: number };
+  set: any;
+  user: typeof usersTable.$inferSelect;
+}) {
+  if (user.role !== "admin") {
+    set.status = 403;
+    return { error: "Forbidden: Admins only" };
+  }
+
+  const market = await db.query.marketsTable.findFirst({
+    where: eq(marketsTable.id, params.id),
+    with: { bets: true }
+  });
+
+  if (!market) {
+    set.status = 404;
+    return { error: "Market not found" };
+  }
+
+  if (market.status === "resolved") {
+    set.status = 400;
+    return { error: "Market already resolved" };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.update(marketsTable)
+      .set({ status: "resolved", resolvedOutcomeId: null })
+      .where(eq(marketsTable.id, params.id));
+
+    for (const bet of market.bets) {
+      const bettor = await tx.query.usersTable.findFirst({ where: eq(usersTable.id, bet.userId) });
+      if (bettor) {
+        await tx.update(usersTable)
+          .set({ balance: bettor.balance + bet.amount })
+          .where(eq(usersTable.id, bet.userId));
+      }
+    }
+  });
+
+  return { success: true, message: "Market archived and bets refunded." };
+}
+
+export async function handleGetUserBets({
+  query,
+  user
+}: {
+  query: { status?: string, page?: string };
+  user: typeof usersTable.$inferSelect;
+}) {
+  const statusFilter = query.status || "active";
+  const limit = 20;
+  const page = parseInt(query.page || "1");
+  const offset = (page - 1) * limit;
+
+  const userBets = await db.select({
+    bet: betsTable,
+    market: marketsTable,
+    outcome: marketOutcomesTable,
+  })
+    .from(betsTable)
+    .innerJoin(marketsTable, eq(betsTable.marketId, marketsTable.id))
+    .innerJoin(marketOutcomesTable, eq(betsTable.outcomeId, marketOutcomesTable.id))
+    .where(and(eq(betsTable.userId, user.id), eq(marketsTable.status, statusFilter as "active" | "resolved")))
+    .orderBy(desc(betsTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return userBets;
 }

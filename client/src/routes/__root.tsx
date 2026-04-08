@@ -1,9 +1,10 @@
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
-import { AuthProvider } from "@/lib/auth-context";
-
 import appCss from "../styles.css?url";
+import { AuthProvider } from "@/lib/auth-context";
+import { Navbar } from "@/components/navbar";
+
 
 function NotFoundComponent() {
   return (
@@ -57,6 +58,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <AuthProvider>
+          <Navbar />
           {children}
           <TanStackDevtools
             config={{

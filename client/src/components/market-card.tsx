@@ -1,8 +1,8 @@
-import { Market } from "@/lib/api";
+import { useNavigate } from "@tanstack/react-router";
+import type { Market } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "@tanstack/react-router";
 
 interface MarketCardProps {
   market: Market;
@@ -25,7 +25,7 @@ export function MarketCard({ market }: MarketCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Outcomes */}
+        
         <div className="space-y-2">
           {market.outcomes.map((outcome) => (
             <div
@@ -45,13 +45,13 @@ export function MarketCard({ market }: MarketCardProps) {
           ))}
         </div>
 
-        {/* Total Market Value */}
+        
         <div className="p-3 rounded-md border border-primary/20 bg-primary/5">
           <p className="text-xs text-muted-foreground">Total Market Value</p>
           <p className="text-2xl font-bold text-primary">${market.totalMarketBets.toFixed(2)}</p>
         </div>
 
-        {/* Action Button */}
+        
         <Button className="w-full" onClick={() => navigate({ to: `/markets/${market.id}` })}>
           {market.status === "active" ? "Place Bet" : "View Results"}
         </Button>

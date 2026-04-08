@@ -3,9 +3,7 @@ export interface ValidationError {
   message: string;
 }
 
-/**
- * Validate registration input
- */
+
 export function validateRegistration(
   username: string,
   email: string,
@@ -37,9 +35,7 @@ export function validateRegistration(
   return errors;
 }
 
-/**
- * Validate login input
- */
+
 export function validateLogin(email: string, password: string): ValidationError[] {
   const errors: ValidationError[] = [];
 
@@ -60,9 +56,7 @@ export function validateLogin(email: string, password: string): ValidationError[
   return errors;
 }
 
-/**
- * Validate market creation
- */
+
 export function validateMarketCreation(
   title: string,
   description: string,
@@ -94,9 +88,7 @@ export function validateMarketCreation(
   return errors;
 }
 
-/**
- * Validate bet placement
- */
+
 export function validateBet(amount: number | string): ValidationError[] {
   const errors: ValidationError[] = [];
   const numAmount = Number(amount);
@@ -111,9 +103,7 @@ export function validateBet(amount: number | string): ValidationError[] {
   return errors;
 }
 
-/**
- * Simple email validation
- */
+
 function isValidEmail(email: string): boolean {
   const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return regex.test(email);
