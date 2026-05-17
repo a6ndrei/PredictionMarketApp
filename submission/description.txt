@@ -1,1 +1,0 @@
-This web application has all the tasks completed and fully functional. The chosen design is the one I like, with interesting colors. I faced challenges with runtime errors, but I fixed them. To run the server, type in the terminal bun dev and to run the frontend type npm run dev. Have a good day!
